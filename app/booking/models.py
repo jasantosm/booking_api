@@ -1,5 +1,12 @@
 from flask_bcrypt import generate_password_hash, check_password_hash
+from flask import Flask,request, jsonify, redirect
+from werkzeug.utils import secure_filename
 
+import os
+from flask import current_app as app
+from google.cloud import storage
+
+CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 
 class UserLogin():
     def __init__(self, email, password):
@@ -81,6 +88,48 @@ class Hotel():
         self.created_at = created_at
         self.updated_at = updated_at
         self.active = active
+
+class Files():
+
+    #ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'])
+
+    # def allowed_file(filename):
+	#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+    def import_images(self, request):
+        #Import the images for this hotel 
+        #try:
+            #This method assumes that the image will be defined as 'hotel_image' within the request.files dictionary
+            #If this element is defined then the image is saved and the image file name and URL are extracted
+        if request.files:
+            #image = request.files['image']
+            uploaded_file = request.files.get('image')
+
+             # Create a Cloud Storage client.
+            gcs = storage.Client()
+
+            # Get the bucket that the file will be uploaded to.
+            bucket = gcs.get_bucket(CLOUD_STORAGE_BUCKET)
+
+            # Create a new blob and upload the file's content.
+            blob = bucket.blob(uploaded_file.filename)
+
+            blob.upload_from_string(
+            uploaded_file.read(),
+            content_type=uploaded_file.content_type
+            )       
+
+          
+        else:              
+            print('no images')
+
+        # The public URL can be used to directly access the uploaded file via HTTP.
+        return blob.public_url
+
+        # except KeyError as e:
+        #     raise ValidationError('Invalid Hotel: missing ' + e.args[0])
+
+        
 
 class Country():
     def __init__(self,
