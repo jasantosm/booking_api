@@ -761,22 +761,33 @@ def get_rooms(filter_fields):
     """
     connection = _connect_to_db()
     results = {}
+    e = None
 
     try:
         with connection.cursor() as cursor:
-            if filter_fields['min_price'] or filter_fields['max_price']:
-                min_price = f'(r.price BETWEEN {filter_fields["min_price"]} AND {filter_fields["max_price"]})'
-            else:
-                min_price = ''
-            if filter_fields['city_id']:
-                city_id = f'(h.city_id = {filter_fields["city_id"]})'
-            else:
-                city_id = ''
-            date = f'b.date_check_out <= "{filter_fields["date_check_in"]}"'
-            if filter_fields['date_check_out']:
-                date += f' OR b.date_check_in >= "{filter_fields["date_check_out"]}"'
-            date = f' ({date} OR b.date_check_in IS NULL)'
-            sql = f'SELECT r.room_id, r.room_number, r.price, h.address, h.hotel_id, h.`name` AS hotel_name FROM rooms AS r LEFT JOIN bookings AS b ON r.room_id=b.room_id LEFT JOIN hotels AS h ON r.hotel_id=h.hotel_id WHERE {min_price} AND {city_id} AND {date}'
+            min_price = ''
+            try:
+                if filter_fields['min_price'] or filter_fields['max_price']:
+                    min_price = f'(r.price BETWEEN {filter_fields["min_price"]} AND {filter_fields["max_price"]})'
+            except KeyError as ke:
+                print('Missing', ke.args[0], 'value')
+
+            city_id = ''
+            try:
+                if filter_fields['city_id']:
+                    city_id = f'AND (h.city_id = {filter_fields["city_id"]})'
+            except KeyError as ke:
+                print('Missing', ke.args[0], 'value')
+
+            date = f'AND (b.date_check_out <= "{filter_fields["date_check_in"]}"'
+            try:
+                if filter_fields['date_check_out']:
+                    date += f' OR b.date_check_in >= "{filter_fields["date_check_out"]}"'
+            except KeyError as ke:
+                print('Missing', ke.args[0], 'value')
+            date = f' {date} OR b.date_check_in IS NULL)'
+
+            sql = f'SELECT r.room_id, r.room_number, r.price, h.address, h.hotel_id, h.`name` AS hotel_name FROM rooms AS r LEFT JOIN bookings AS b ON r.room_id=b.room_id LEFT JOIN hotels AS h ON r.hotel_id=h.hotel_id WHERE {min_price} {city_id} {date}'
             rows = cursor.execute(sql)
             if rows > 0:
                 e = 200
@@ -789,7 +800,101 @@ def get_rooms(filter_fields):
                 e = 404
                 results = {'msg': 'No match found!'}
     except Exception as ex:
-        e = ex.args[0]
+        er = ex.args[0]
+        print(ex)
     finally:
         connection.close()
         return results, e
+
+
+def delete_room(room_id):
+    """
+    """
+    connection = _connect_to_db()
+    result = {}
+
+    try:
+        with connection.cursor() as cursor:
+            sql = f'UPDATE rooms SET active=0 WHERE room_id={room_id} AND active=1'
+            rows = cursor.execute(sql)
+            if rows > 0:
+                e = 204
+                result = None
+            else:
+                e = 404
+                result['msg'] = f'Room ID {room_id} was not found or invalid!'
+
+        connection.commit()
+    except Exception as ex:
+        e = ex.args[0]
+    finally:
+        connection.close()
+        return result, e
+
+
+def update_room(room):
+    """
+    """
+    connection = _connect_to_db()
+    result = {}
+
+    try:
+        with connection.cursor() as cursor:
+            values = []
+            for key, value in room.__dict__.items():
+                if key != 'room_id':
+                    if isinstance(value, int):
+                        values.append('`' + str(key) + '`=' + str(value))
+                    elif isinstance(value, str):
+                        values.append('`' + str(key) + '`="' + value + '"')
+            ','.join(values)
+            sql = f'UPDATE rooms SET {values} WHERE room_id={room.room_id}'
+            rows = cursor.execute(sql)
+            if rows == 1:
+                e = 200
+                result['msg'] = f'Room ID {room.id} have been updated succesfully!'
+            else:
+                e = 404
+                result['msg'] = f'There were not new values to update!'
+    except Exception as ex:
+        e = ex.args[0]
+    finally:
+        connection.close()
+        return result, e
+
+
+def get_room(room_id):
+    """
+    """
+    connection = _connect_to_db()
+    result = {}
+
+    try:
+        with connection.cursor() as cursor:
+            sql = f'SELECT r.room_id, h.`name` AS hotel_name, h.hotel_id, \
+                    r.room_number, r.available, r.price, r.max_people, \
+                    r.`description`, h.address, c.`name` AS city, \
+                    h.check_out_hour, h.html_iframe, h.policy \
+                    FROM rooms AS r \
+                    JOIN hotels AS h ON r.hotel_id=h.hotel_id \
+                    JOIN cities AS c ON c.city_id=h.city_id \
+                    WHERE r.room_id={room_id}'
+            rows = cursor.execute(sql)
+            if rows == 1:
+                e = 200
+                result = cursor.fetchone()
+                result['check_out_hour'] = str(result['check_out_hour'])
+
+                sql = f'SELECT picture_url FROM hotel_pictures WHERE hotel_id={result.get("hotel_id")}'
+                rows_2 = cursor.execute(sql)
+                if rows_2 > 0:
+                    result['pictures_urls'] = cursor.fetchall()
+
+            else:
+                e = 404
+                result['msg'] = f'Room ID {room_id} not found!'
+    except Exception as ex:
+        e = ex.args[0]
+    finally:
+        connection.close()
+        return result, e
