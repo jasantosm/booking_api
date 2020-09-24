@@ -829,7 +829,6 @@ def delete_room(room_id):
         e = ex.args[0]
     finally:
         connection.close()
-<<<<<<< HEAD
         return result, e
 
 
@@ -899,8 +898,7 @@ def get_room(room_id):
     finally:
         connection.close()
         return result, e
-=======
-        return results, e
+
 
 # Services functions section
 
@@ -1179,4 +1177,3 @@ def delete_review(review_id):
             return {'msg': msg}, e
         else:
             return {'msg': msg}, e
->>>>>>> master
